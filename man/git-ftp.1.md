@@ -18,7 +18,7 @@ Git-ftp is a FTP client using Git to determine which local files to upload or wh
 
 It saves the deployed state by uploading the SHA1 hash in the .git-ftp.log file. There is no need for [Git] to be installed on the remote host.
 
-Even if you play with different branches, git-ftp knows which files are different and only handles those files. No ordinary FTP client can do this and it saves time and bandwith.
+Even if you play with different branches, git-ftp knows which files are different and only handles those files. No ordinary FTP client can do this and it saves time and bandwidth.
 
 Another advantage is Git-ftp only handles files which are tracked with [Git]. 
 
@@ -35,6 +35,9 @@ Another advantage is Git-ftp only handles files which are tracked with [Git].
 
 `show`
 :	Downloads last uploaded SHA1 from log and hooks \`git show\`.
+
+`log`
+:   Downloads last uploaded SHA1 from log and hooks \`git log\`.
 
 `add-scope <scope>`
 :	Creates a new scope (e.g. dev, production, testing, foobar). This is a wrapper action over git-config. See **SCOPES** section for more information.
@@ -89,6 +92,12 @@ Another advantage is Git-ftp only handles files which are tracked with [Git].
 `--syncroot`
 :	Specifies a directory to sync from as if it were the git project root path.
 
+`--sftp-key`
+:	SSH Private key file name.
+
+`--sftp-public-key`
+:	SSH Public key file name. Used with --sftp-key option.
+
 `--insecure`
 :	Don't verify server's certificate.
 
@@ -137,6 +146,7 @@ Everyone likes examples
 	$ git config git-ftp.cacert caCertStore
 	$ git config git-ftp.deployedsha1file mySHA1File
 	$ git config git-ftp.insecure 1
+	$ git config git-ftp.sftp-key ~/.ssh/id_rsa
 
 After setting those defaults, push to *john@ftp.example.com* is as simple as
 

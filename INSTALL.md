@@ -10,7 +10,7 @@ This should work on Mac OS X, Debian, Ubuntu, Fedora, RedHat, etc.
 
 The easiest way is to use Git for installing:
 
-	$ git clone https://github.com/resmo/git-ftp.git
+	$ git clone https://github.com/git-ftp/git-ftp.git
 	$ cd git-ftp
 	$ git checkout master
 	$ sudo make install
@@ -36,7 +36,7 @@ Ubuntu PPA (Personal Package Archive) repository
 Adding PPA on Ubuntu
 
 	$ sudo -s
-	# add-apt-repository ppa:resmo/git-ftp
+	# add-apt-repository ppa:git-ftp/git-ftp
 	# aptitude update
 	# aptitude install git-ftp
 
@@ -48,6 +48,7 @@ Mac OS X
 Warning: git-ftp will not work with OS X 10.8 without GNU grep!
 
 Using homebrew:
+
 	# brew install grep
 	# brew install git
 	# brew install curl --with-ssl --with-ssh
@@ -67,13 +68,10 @@ otherwise install msysgit.
 After this, open git bash (or cygwin bash for cygwin only):
 
 	$ cd ~
-	$ git clone https://github.com/resmo/git-ftp git-ftp.git
-	$ cd git-ftp.git && chmod +x git-ftp
-	$ cp ~/git-ftp.git/git-ftp /bin/git-ftp
-
-__Important:__ Because Windows does not support symbolic links (shortcuts),
-the above steps will create a copy of the git-ftp script in your /bin/ directory.
-If you update your git-ftp clone, you will have to repeat the last command.
+	$ git clone https://github.com/git-ftp/git-ftp
+	$ cd git-ftp && chmod +x git-ftp
+	$ cd /bin
+	$ ln -s ~/git-ftp/git-ftp
 
 *Note: the /bin/ directory is a alias, and if you use msysgit this is the same as C:\Program Files (x86)\Git\bin\*
 
@@ -89,7 +87,7 @@ This is a easy way to have more then one git-ftp installed
 
 	$ mkdir -p ~/develop/git-ftp.git
 	$ cd ~/develop/git-ftp.git
-	$ git clone https://github.com/resmo/git-ftp.git .
+	$ git clone https://github.com/git-ftp/git-ftp.git .
 	$ chmod +x git-ftp
 	$ mkdir ~/bin && cd ~/bin/
 	$ ln -s ~/develop/git-ftp.git/git-ftp git-ftp.dev

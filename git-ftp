@@ -24,7 +24,7 @@
 readonly DEFAULT_PROTOCOL="ftp"
 readonly REMOTE_LCK_FILE="$(basename "$0").lck"
 readonly SYSTEM="$(uname)"
-readonly VERSION='0.8.4'
+readonly VERSION='0.9.0'
 
 # ------------------------------------------------------------
 # Defaults
@@ -48,6 +48,8 @@ DEPLOYED_SHA1=""
 LOCAL_SHA1=""
 SYNCROOT=""
 CURL_INSECURE=""
+CURL_PUBLIC_KEY=""
+CURL_PRIVATE_KEY=""
 CURL_UPLOADS=()
 declare -a CURL_ARGS
 declare -i VERBOSE=0
@@ -105,6 +107,9 @@ ACTIONS
 
 	. show
 		Downloads last uploaded SHA1 from log and hooks \`git show\`.
+
+	. log
+		Downloads last uploaded SHA1 from log and hooks \`git log\`.
 
 	. catchup
 		Uploads current SHA1 to log, does not upload any files.
@@ -403,13 +408,13 @@ remove_file() {
 	set_default_curl_options
 	CURL_ARGS+=(-Q "${REMOTE_DELETE_CMD}${REMOTE_PATH}${FILENAME}")
 	CURL_ARGS+=("$REMOTE_PROTOCOL://$REMOTE_HOST")
-	if [ "$REMOTE_CMD_OPTIONS" = "-v" ]; then
+	if [ "${REMOTE_CMD_OPTIONS:0:2}" = "-v" ]; then
 		curl "${CURL_ARGS[@]}"
 	else
 		curl "${CURL_ARGS[@]}" > /dev/null 2>&1
-		if [ $? -ne 0 ]; then
-			write_error_log "Could not delete ${REMOTE_PATH}${FILENAME}, continuing..."
-		fi
+	fi
+	if [ $? -ne 0 ]; then
+		write_error_log "Could not delete ${REMOTE_PATH}${FILENAME}, continuing..."
 	fi
 }
 
@@ -674,8 +679,22 @@ handle_submodule_sync() {
 }
 
 handle_remote_protocol_options() {
-	# SFTP uses a different remove command and uses absolute paths
-	[ "$REMOTE_PROTOCOL" = "sftp" ] && REMOTE_DELETE_CMD="rm /"
+	if [ "$REMOTE_PROTOCOL" = "sftp" ]; then
+		set_sftp_config
+		
+		if [ ! -z "$CURL_PRIVATE_KEY" ]; then
+			write_log "Using ssh private key file $CURL_PRIVATE_KEY"
+			if [ -z "$CURL_PUBLIC_KEY" ]; then
+				# If public key is not specified, use private key with .pub extension
+				CURL_PUBLIC_KEY="$CURL_PRIVATE_KEY.pub"
+			fi
+			write_log "Using ssh public key file $CURL_PUBLIC_KEY"
+			REMOTE_CMD_OPTIONS="$REMOTE_CMD_OPTIONS --key $CURL_PRIVATE_KEY --pubkey $CURL_PUBLIC_KEY"
+		fi
+		
+		# SFTP uses a different remove command and uses absolute paths
+		REMOTE_DELETE_CMD="rm /"
+	fi
 
 	# Check for using cacert
 	if [ "$REMOTE_PROTOCOL" = "ftpes" -o "$REMOTE_PROTOCOL" = "ftps" ] && \
@@ -707,6 +726,9 @@ handle_action() {
 		show)
 			action_show
 			;;
+		log)
+			action_log
+			;;
 		add-scope)
 			action_add_scope
 			;;
@@ -728,16 +750,21 @@ set_remote_cacert() {
 }
 
 set_remote_password() {
-	[ -z $REMOTE_PASSWD ] && [ $USE_KEYCHAIN -eq 1 ] && get_keychain_password "$KEYCHAIN_USER"
-	[ -z $REMOTE_PASSWD ] && REMOTE_PASSWD="$(get_config password)"
+	[ -z "$REMOTE_PASSWD" ] && [ $USE_KEYCHAIN -eq 1 ] && get_keychain_password "$KEYCHAIN_USER"
+	[ -z "$REMOTE_PASSWD" ] && REMOTE_PASSWD="$(get_config password)"
 }
 
 set_syncroot() {
-	[ -z $SYNCROOT ] && SYNCROOT="$(get_config syncroot)"
-	if [ $SYNCROOT ]; then
-		[ -d $SYNCROOT ] || print_error_and_die "'$SYNCROOT' is not a directory! Exiting..." $ERROR_GIT
+	[ -z "$SYNCROOT" ] && SYNCROOT="$(get_config syncroot)"
+	if [ "$SYNCROOT" ]; then
+		[ -d "$SYNCROOT" ] || print_error_and_die "'$SYNCROOT' is not a directory! Exiting..." $ERROR_GIT
 		SYNCROOT=$(echo $SYNCROOT | sed 's#/*$##')/
 	fi
+}
+
+set_sftp_config() {
+	[ -z $CURL_PRIVATE_KEY ] && CURL_PRIVATE_KEY="$(get_config key)"
+	[ -z $CURL_PUBLIC_KEY ] && CURL_PUBLIC_KEY="$(get_config pubkey)"
 }
 
 set_remotes() {
@@ -748,7 +775,7 @@ set_remotes() {
 	write_log "User is '$REMOTE_USER'."
 
 	set_remote_password
-	if [ -z $REMOTE_PASSWD ]; then
+	if [ -z "$REMOTE_PASSWD" ]; then
 		write_log "No password is set."
 	else
 		write_log "Password is set."
@@ -756,7 +783,7 @@ set_remotes() {
 
 	set_remote_protocol
 	# Add trailing slash if missing
-	if [ ! -z $REMOTE_PATH ] && ! echo "$REMOTE_PATH" | egrep -q "*/$"; then
+	if [ ! -z $REMOTE_PATH ] && ! echo "$REMOTE_PATH" | egrep -q "/$"; then
 		write_log "Added missing trailing / in path."
 		REMOTE_PATH="$REMOTE_PATH/"
 	fi
@@ -874,6 +901,13 @@ action_show() {
 	git show "$DEPLOYED_SHA1"
 }
 
+action_log() {
+	set_remotes
+	DEPLOYED_SHA1="$(get_file_content $DEPLOYED_SHA1_FILE)"
+	check_exit_status "Could not get uploaded log file" $ERROR_DOWNLOAD
+	git log "$DEPLOYED_SHA1"
+}
+
 action_add_scope() {
 	check_is_git_project
 	set_scope
@@ -947,7 +981,7 @@ fi
 while test $# != 0
 do
 	case "$1" in
-		init|push|catchup|show|add-scope|remove-scope)
+		init|push|catchup|show|add-scope|remove-scope|log)
 			ACTION="$1"
 			# catch scope
 			if [ "$1" == "add-scope" ] || [ "$1" == "remove-scope" ]; then
@@ -1125,6 +1159,42 @@ do
 						shift
 					else
 						print_error_and_die "Too few arguments for option --cacert" $ERROR_MISSING_ARGUMENTS
+					fi
+					;;
+			esac
+			;;
+		--key)
+			case "$#,$1" in
+				*,*=*)
+					CURL_PRIVATE_KEY=$(expr "z$1" : 'z-[^=]*=\(.*\)')
+					;;
+				1,*)
+					print_error_and_die "Too few arguments for option --key." $ERROR_MISSING_ARGUMENTS
+					;;
+				*)
+					if ! echo "$2" | egrep -q '^-'; then
+						CURL_PRIVATE_KEY="$2"
+						shift
+					else
+						print_error_and_die "Too few arguments for option --key." $ERROR_MISSING_ARGUMENTS
+					fi
+					;;
+			esac
+			;;
+		--pubkey)
+			case "$#,$1" in
+				*,*=*)
+					CURL_PUBLIC_KEY=$(expr "z$1" : 'z-[^=]*=\(.*\)')
+					;;
+				1,*)
+					print_error_and_die "Too few arguments for option --pubkey." $ERROR_MISSING_ARGUMENTS
+					;;
+				*)
+					if ! echo "$2" | egrep -q '^-'; then
+						CURL_PUBLIC_KEY="$2"
+						shift
+					else
+						print_error_and_die "Too few arguments for option --pubkey." $ERROR_MISSING_ARGUMENTS
 					fi
 					;;
 			esac
